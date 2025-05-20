@@ -17,6 +17,7 @@ func main() {
 	defer db.Close()
 
 	http.HandleFunc("/api/verify", handler.VerifyHandler(db))
+	http.HandleFunc("/api/create", handler.CreateHandler(db))
 
 	log.Println("Server listening on :8080")
 	http.ListenAndServe(":8080", nil)
