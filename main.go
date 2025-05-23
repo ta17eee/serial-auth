@@ -30,6 +30,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/verify", handler.VerifyHandler(db))
 	mux.HandleFunc("/api/create", handler.CreateHandler(db))
+	mux.HandleFunc("/api/serials", handler.ListSerialsHandler(db))
 
 	// ロギングミドルウェアを適用
 	loggedMux := handler.LoggingMiddleware(mux)
