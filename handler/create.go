@@ -61,6 +61,12 @@ func parseExpiry(expiryStr string) (time.Duration, error) {
 // CreateHandler は /api/create へのリクエストを処理します。
 func CreateHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 認証状態をチェック - 認証失敗時は処理をスキップ
+		if authStatus, ok := r.Context().Value(AuthStatusKey).(string); ok && strings.HasPrefix(authStatus, "reject") {
+			// 認証失敗時は何もしない（AuthMiddlewareで既にレスポンス済み）
+			return
+		}
+
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 			return

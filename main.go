@@ -18,7 +18,11 @@ func main() {
 		log.Fatal("Cannot open log file: ", err)
 	}
 	log.SetOutput(file)
-	// log.SetFlags(log.LstdFlags | log.Lmicroseconds) // 必要に応じて日時とマイクロ秒のフラグを設定
+
+	// 設定ファイルの読み込み
+	if err := handler.LoadConfig("config.json"); err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	db, err := sql.Open("sqlite3", "./serials.db")
 	if err != nil {
@@ -29,14 +33,16 @@ func main() {
 	// ハンドラをmuxに登録
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/verify", handler.VerifyHandler(db))
-	mux.HandleFunc("/api/create", handler.CreateHandler(db))
-	mux.HandleFunc("/api/serials", handler.ListSerialsHandler(db))
 
-	// ロギングミドルウェアを適用
-	loggedMux := handler.LoggingMiddleware(mux)
+	// 認証が必要なエンドポイントには認証ミドルウェアを適用
+	mux.Handle("/api/create", handler.AuthMiddleware(http.HandlerFunc(handler.CreateHandler(db))))
+	mux.Handle("/api/serials", handler.AuthMiddleware(http.HandlerFunc(handler.ListSerialsHandler(db))))
+
+	// すべてのリクエストにLoggingMiddlewareを適用（最外層）
+	finalHandler := handler.LoggingMiddleware(mux)
 
 	log.Println("Server listening on :8080")
-	err = http.ListenAndServe(":8080", loggedMux)
+	err = http.ListenAndServeTLS(":8080", "cert.pem", "key.pem", finalHandler)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
