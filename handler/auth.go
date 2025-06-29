@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,12 +10,20 @@ import (
 	"os"
 )
 
+// contextKey はコンテキストのキーの型です。
+type contextKey string
+
+// AuthStatusKey は認証ステータスをコンテキストに保存するためのキーです。
+const AuthStatusKey contextKey = "authStatus"
+
+// Config は設定ファイルの内容を保持する構造体です。
 type Config struct {
 	AdminToken string `json:"admin_token"`
 }
 
 var appConfig Config
 
+// LoadConfig は設定ファイルから設定を読み込みます。
 func LoadConfig(filePath string) error {
 	configFile, err := os.Open(filePath)
 	if err != nil {
@@ -45,18 +54,32 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		token := r.Header.Get("X-Admin-Token")
 
 		if token == "" {
-			http.Error(w, "Unauthorized: Missing X-Admin-Token header", http.StatusUnauthorized)
-			log.Printf("Auth failed: Missing X-Admin-Token from %s for %s %s", r.RemoteAddr, r.Method, r.RequestURI)
+			// トークンが存在しない場合
+			ctx := context.WithValue(r.Context(), AuthStatusKey, "reject (missing token)")
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Unauthorized: Missing X-Admin-Token header\n"))
+
+			// 認証失敗でもnext.ServeHTTP()を呼び出してLoggingMiddlewareに到達させる
+			// ただし、ハンドラ側で認証状態をチェックして処理をスキップする
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
 		if token != appConfig.AdminToken {
-			http.Error(w, "Forbidden: Invalid X-Admin-Token", http.StatusForbidden)
-			log.Printf("Auth failed: Invalid X-Admin-Token '%s' from %s for %s %s", token, r.RemoteAddr, r.Method, r.RequestURI)
+			// トークンが無効な場合
+			ctx := context.WithValue(r.Context(), AuthStatusKey, fmt.Sprintf("reject (invalid token: %s)", token))
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("Forbidden: Invalid X-Admin-Token\n"))
+
+			// 認証失敗でもnext.ServeHTTP()を呼び出してLoggingMiddlewareに到達させる
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
-		// 認証成功
-		next.ServeHTTP(w, r)
+		// 認証成功時
+		ctx := context.WithValue(r.Context(), AuthStatusKey, "accept")
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

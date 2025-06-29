@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,6 +26,12 @@ type ListSerialsResponse struct {
 
 func ListSerialsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 認証状態をチェック - 認証失敗時は処理をスキップ
+		if authStatus, ok := r.Context().Value(AuthStatusKey).(string); ok && strings.HasPrefix(authStatus, "reject") {
+			// 認証失敗時は何もしない（AuthMiddlewareで既にレスポンス済み）
+			return
+		}
+
 		if r.Method != http.MethodGet {
 			respondListError(w, "Only GET method is allowed", http.StatusMethodNotAllowed)
 			return
